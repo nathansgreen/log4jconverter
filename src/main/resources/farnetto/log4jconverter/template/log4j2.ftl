@@ -1,9 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
-${comments.log4jconfiguration}
+${comments.log4jconfiguration!}
 <Configuration status="${statusLevel}">
-
     <Appenders>
-    
       <#list appenders as appender>
         ${comments[appender.name]!}
         <#list appender.param as param>
@@ -17,10 +15,15 @@ ${comments.log4jconfiguration}
         <#if appender.clazz == "org.apache.log4j.RollingFileAppender">
         <RollingFile name="${appender.name}" fileName="${fileName}" filePattern="${fileName?replace('.log', '-%i.log')}">
             <PatternLayout pattern="${appender.layout.param?first.value}"/>
-            <@maxfilesize appender/>
+            <@policies appender/>
             <@maxbackupindex appender/>
         </RollingFile>
-        
+        <#elseif appender.clazz == "org.apache.log4j.DailyRollingFileAppender">
+        <RollingFile name="${appender.name}" fileName="${fileName}" filePattern="${fileName?replace('.log', '%d{' + appender.param?filter(p -> p.name == 'DatePattern')?first.value + '}.log')}">
+            <PatternLayout pattern="${appender.layout.param?first.value}"/>
+            <@policies appender/>
+            <@maxbackupindex appender/>
+        </RollingFile>
         <#elseif appender.clazz == "org.apache.log4j.FileAppender">
         <File name="${appender.name}" fileName="${fileName}" append="${append}">
             <PatternLayout pattern="${appender.layout.param?first.value}"/>
@@ -30,7 +33,6 @@ ${comments.log4jconfiguration}
                 </#if>
             </#list>
         </File>
-        
         <#elseif appender.clazz == "org.apache.log4j.ConsoleAppender">
         <Console name="${appender.name}"<@consoletarget appender/>>
             <PatternLayout pattern="${appender.layout.param?first.value}"/>
@@ -40,39 +42,42 @@ ${comments.log4jconfiguration}
                 </#if>
             </#list>
         </Console>
-        
+        <#elseif appender.clazz == "org.apache.log4j.AsyncAppender">
+        <Async name="${appender.name}"<@consoletarget appender/>>
+            <#list appender.appenderRef as appenderRef>
+            <AppenderRef ref="${appenderRef.ref}"/>
+            </#list>
+        </Async>
         <#else>
         <${appender.clazz?keep_after_last(".")} name="${appender.name}">
           <#list appender.param as p>
             <Param name="${p.name}" value="${p.value}"/>
           </#list>
         </${appender.clazz?keep_after_last(".")}>
-        
         </#if>
       </#list>
+
     </Appenders>
     
     <Loggers>
       <#list loggers as logger>
         ${comments[logger.name]!}
-        <Logger name="${logger.name}"<#if logger.level??> level="${logger.level.value}"</#if><#if !logger.additivity?boolean> additivity="${logger.additivity}"</#if><#if (logger.appenderRef?size == 0)>/</#if>>
+        <Logger name="${logger.name}"<#if (logger.priorityOrLevel?size > 0)> level="${logger.priorityOrLevel?first.value}"</#if><#if !logger.additivity?boolean> additivity="${logger.additivity}"</#if><#if (logger.appenderRef?size == 0)>/</#if>>
           <#if (logger.appenderRef?size > 0)>
             <#list logger.appenderRef as appender>
             <AppenderRef ref="${appender.ref}"/>
             </#list>
         </Logger>
           </#if>
-        
       </#list>
         ${comments.root!}
         <Root level="${root.priorityOrLevel?first.value}">
           <#list root.appenderRef as appender>
             <AppenderRef ref="${appender.ref}"/>
           </#list>
-        </Root>      
-    
+        </Root>
+
     </Loggers>
-    
 </Configuration>
 <#macro consoletarget appender>
   <#assign target = "">
@@ -88,14 +93,19 @@ ${comments.log4jconfiguration}
     <#assign target = " target=\"SYSTEM_ERR\"">
   </#if>
 ${target}</#macro>
-<#macro maxfilesize appender>
-  <#list appender.param as p>
-    <#if p.name == "MaxFileSize">
+<#macro policies appender>
+  <#if appender.clazz == 'org.apache.log4j.DailyRollingFileAppender' || (appender.param?filter(p -> p.name == 'MaxFileSize')?size > 0)>
             <Policies>
+      <#list appender.param as p>
+        <#if p.name == "MaxFileSize">
                 <SizeBasedTriggeringPolicy size="${p.value}"/>
+        </#if>
+      </#list>
+      <#if appender.clazz == 'org.apache.log4j.DailyRollingFileAppender'>
+                <TimeBasedTriggeringPolicy filePattern="${fileName?replace('.log', '%d{' + appender.param?filter(p -> p.name == 'DatePattern')?first.value + '}.log')}"/>
+      </#if>
             </Policies>
-    </#if>
-  </#list>
+  </#if>
 </#macro>
 <#macro maxbackupindex appender>
   <#list appender.param as p>

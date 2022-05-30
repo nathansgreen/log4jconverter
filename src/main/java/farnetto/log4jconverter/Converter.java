@@ -10,10 +10,7 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -24,6 +21,7 @@ import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParserFactory;
 import javax.xml.transform.sax.SAXSource;
 
+import farnetto.log4jconverter.jaxb.Appender;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.xml.sax.InputSource;
@@ -108,7 +106,7 @@ public class Converter
      */
     private void parseXml(File log4jInput, OutputStream log4j2Output, Map<String,String> comments)
     {
-        Log4JConfiguration log4jConfig = null;
+        final Log4JConfiguration log4jConfig;
         try
         {
             Unmarshaller unmarshaller = JAXBContext.newInstance("farnetto.log4jconverter.jaxb").createUnmarshaller();
@@ -128,6 +126,14 @@ public class Converter
         {
             throw new ConverterException("Can not initialize Unmarshaller", e);
         }
+
+        final Optional<Appender> asyncAppender = log4jConfig.getAppender().stream()
+            .filter(a -> "org.apache.log4j.AsyncAppender".equals(a.getClazz()))
+            .findFirst();
+        asyncAppender.ifPresent(a -> {
+            log4jConfig.getAppender().remove(a);
+            log4jConfig.getAppender().add(a);
+        });
 
         Map<String,Object> input = new HashMap<String,Object>();
         input.put("statusLevel", Boolean.valueOf(log4jConfig.getDebug()) ? "debug" : "warn");
