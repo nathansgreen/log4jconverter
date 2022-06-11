@@ -1,13 +1,6 @@
 package farnetto.log4jconverter;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.OutputStream;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
+import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
@@ -22,6 +15,8 @@ import javax.xml.parsers.SAXParserFactory;
 import javax.xml.transform.sax.SAXSource;
 
 import farnetto.log4jconverter.jaxb.Appender;
+import org.apache.commons.vfs2.FileSystemException;
+import org.apache.commons.vfs2.VFS;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.xml.sax.InputSource;
@@ -41,7 +36,7 @@ public class Converter
 {
     private static final Logger LOG = LogManager.getLogger(Converter.class);
 
-    private static final String FREEMARKER_VERSION = "2.3.28";
+    private static final String FREEMARKER_VERSION = "2.3.31";
 
     private static final String EOL = System.getProperty("line.separator");
 
@@ -51,53 +46,46 @@ public class Converter
 
     private static final Pattern START_TAG_PATTERN = Pattern.compile("<[a-zA-Z]");
 
-    public static void main(String[] args) throws FileNotFoundException
-    {
-        boolean inPlace = false;
-        if (args.length > 0 && args[0].equals("-i"))
-        {
-            // inplace
-            inPlace = true;
-            // shift
-            args = Arrays.<String>copyOfRange(args, 1, args.length);
+    public static void main(String[] args)
+        throws FileNotFoundException, FileSystemException {
+
+        ConverterConfig config = ConverterConfig.fromArgs(args);
+
+        Converter converter = new Converter();
+        try {
+            converter.convert(config);
+        } finally {
+            VFS.getManager().close();
         }
-        if (args.length == 0)
-        {
-            System.err.println("input file must be specified");
-            System.exit(1);
-        }
-        String fileName = args[0];
-        File in = new File(fileName);
-        if (!in.isFile())
-        {
-            System.err.println("input must be a file");
-            System.exit(1);
-        }
-        OutputStream out = System.out;
-        if (inPlace)
-        {
-            String outFileName = fileName.replaceAll("log4j", "log4j2");
-            out = new FileOutputStream(outFileName);
-        }
-        new Converter().convert(in, out);
     }
 
     /**
-     * @param log4jInput
-     * @param log4j2Output
+     * @param config
      */
-    public void convert(File log4jInput, OutputStream log4j2Output)
+    public void convert(ConverterConfig config)
     {
-        if (log4jInput == null)
-        {
-            throw new NullPointerException("input must not be null");
-        }
+        config.getFiles().parallelStream().forEach(file -> {
+            try {
+                OutputStream log4j2Output = System.out;
+                if (config.isInPlace()) {
+                    String outFileName = file.getName().getParent().getPath() + File.separator +
+                        file.getName().getBaseName().replaceAll("log4j", "log4j2");
+                    log4j2Output = new FileOutputStream(outFileName);
+                }
+                File log4jInput = new File(file.getName().getPath());
 
-        Map<String,String> comments = parseComments(log4jInput);
+                // TODO: Fix comment parsing - disabled for now
+                Map<String,String> comments = new HashMap<>(); //parseComments(log4jInput);
+    //            LOG.debug(comments);
 
-        LOG.debug(comments);
+                // TODO: Refactor to use vfs2 FileObjects
 
-        parseXml(log4jInput, log4j2Output, comments);
+                parseXml(log4jInput, log4j2Output, comments);
+            } catch (Exception e) {
+                System.err.println("Could not convert file '" +
+                    file.getName().getPath() + "' - reason: " + e.getMessage());
+            }
+        });
     }
 
     /**
@@ -127,6 +115,7 @@ public class Converter
             throw new ConverterException("Can not initialize Unmarshaller", e);
         }
 
+        // Place the AsyncAppender at the end of the list if present
         final Optional<Appender> asyncAppender = log4jConfig.getAppender().stream()
             .filter(a -> "org.apache.log4j.AsyncAppender".equals(a.getClazz()))
             .findFirst();
