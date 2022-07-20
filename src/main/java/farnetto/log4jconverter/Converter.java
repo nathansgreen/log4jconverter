@@ -100,8 +100,8 @@ public class Converter
             Unmarshaller unmarshaller = JAXBContext.newInstance("farnetto.log4jconverter.jaxb").createUnmarshaller();
 
             SAXParserFactory spf = SAXParserFactory.newInstance();
-            spf.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
-            spf.setFeature("http://xml.org/sax/features/validation", false);
+            spf.setFeature("https://apache.org/xml/features/nonvalidating/load-external-dtd", false);
+            spf.setFeature("https://xml.org/sax/features/validation", false);
 
             XMLReader xmlReader = spf.newSAXParser().getXMLReader();
 
@@ -124,8 +124,8 @@ public class Converter
             log4jConfig.getAppender().add(a);
         });
 
-        Map<String,Object> input = new HashMap<String,Object>();
-        input.put("statusLevel", Boolean.valueOf(log4jConfig.getDebug()) ? "debug" : "warn");
+        Map<String,Object> input = new HashMap<>();
+        input.put("statusLevel", Boolean.parseBoolean(log4jConfig.getDebug()) ? "debug" : "warn");
         input.put("appenders", log4jConfig.getAppender());
         input.put("loggers", log4jConfig.getCategoryOrLogger());
         input.put("root", log4jConfig.getRoot());
